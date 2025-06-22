@@ -7,24 +7,34 @@ export default function LogTable() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const fetchLogs = async () => {
-      try {
-        setLoading(true);
-        const response = await getLogs();
-        // Sort logs by timestamp in descending order
-        const sortedLogs = response.data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        setLogs(sortedLogs);
-        setError(null);
-      } catch (err) {
-        setError("Unable to load logs list.");
-        console.error(err);
-      } finally {
+  const fetchLogs = async (isInitialLoad = false) => {
+    if (isInitialLoad) {
+      setLoading(true);
+    }
+    try {
+      const response = await getLogs();
+      // Sort logs by timestamp in descending order
+      const sortedLogs = response.data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      setLogs(sortedLogs);
+      setError(null);
+    } catch (err) {
+      setError("Không thể tải danh sách logs.");
+      console.error(err);
+    } finally {
+      if (isInitialLoad) {
         setLoading(false);
       }
-    };
+    }
+  };
 
-    fetchLogs();
+  useEffect(() => {
+    fetchLogs(true); // Initial fetch
+
+    const intervalId = setInterval(() => {
+      fetchLogs(false); // Polling fetch
+    }, 5000);
+
+    return () => clearInterval(intervalId); // Cleanup
   }, []);
 
   if (loading) {

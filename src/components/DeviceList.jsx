@@ -13,9 +13,11 @@ export default function DeviceList() {
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [deviceToDelete, setDeviceToDelete] = useState(null);
 
-  const fetchDevices = async () => {
-    try {
+  const fetchDevices = async (isInitialLoad = false) => {
+    if (isInitialLoad) {
       setLoading(true);
+    }
+    try {
       const response = await getDevices();
       setDevices(response.data);
       setError(null);
@@ -23,12 +25,20 @@ export default function DeviceList() {
       setError("Unable to load device list. Please check your connection and backend.");
       console.error(err);
     } finally {
-      setLoading(false);
+      if (isInitialLoad) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    fetchDevices();
+    fetchDevices(true);
+
+    const intervalId = setInterval(() => {
+      fetchDevices(false);
+    }, 5000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   const handleClickOpenDeleteDialog = (device) => {
@@ -46,7 +56,7 @@ export default function DeviceList() {
 
     try {
       await deleteDevice(deviceToDelete.id);
-      fetchDevices();
+      fetchDevices(false);
     } catch (err) {
       setError(`Failed to delete device ${deviceToDelete.name}.`);
       console.error(err);
