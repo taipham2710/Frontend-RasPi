@@ -1,25 +1,28 @@
 import React from "react";
-import { AppBar, Toolbar, Typography, Drawer, List, ListItem, ListItemIcon, ListItemText, Box, CssBaseline } from "@mui/material";
+import { AppBar, Toolbar, Typography, Drawer, List, ListItem, ListItemIcon, ListItemText, Box, CssBaseline, ListItemButton } from "@mui/material";
 import DevicesIcon from "@mui/icons-material/Devices";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import ListAltIcon from "@mui/icons-material/ListAlt";
+import { Link, useLocation } from "react-router-dom";
 
 const drawerWidth = 220;
 
 const menuItems = [
-  { text: "Dashboard", icon: <DashboardIcon /> },
-  { text: "Thiết bị", icon: <DevicesIcon /> },
-  { text: "Log", icon: <ListAltIcon /> },
+  { text: "Dashboard", icon: <DashboardIcon />, path: "/" },
+  { text: "Device", icon: <DevicesIcon />, path: "/devices" },
+  { text: "Log", icon: <ListAltIcon />, path: "/logs" },
 ];
 
-export default function Layout({ children, onMenuClick }) {
+export default function Layout({ children }) {
+  const location = useLocation();
+
   return (
     <Box sx={{ display: "flex" }}>
       <CssBaseline />
       <AppBar position="fixed" sx={{ zIndex: 1201 }}>
         <Toolbar>
           <Typography variant="h6" noWrap component="div">
-            Hệ thống IoT RasPi
+            System of IoT RasPi
           </Typography>
         </Toolbar>
       </AppBar>
@@ -34,10 +37,12 @@ export default function Layout({ children, onMenuClick }) {
         <Toolbar />
         <Box sx={{ overflow: "auto" }}>
           <List>
-            {menuItems.map((item, index) => (
-              <ListItem button key={item.text} onClick={() => onMenuClick(item.text)}>
-                <ListItemIcon>{item.icon}</ListItemIcon>
-                <ListItemText primary={item.text} />
+            {menuItems.map((item) => (
+              <ListItem key={item.text} disablePadding component={Link} to={item.path}>
+                <ListItemButton selected={location.pathname === item.path}>
+                  <ListItemIcon>{item.icon}</ListItemIcon>
+                  <ListItemText primary={item.text} />
+                </ListItemButton>
               </ListItem>
             ))}
           </List>
