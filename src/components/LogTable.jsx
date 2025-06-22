@@ -1,24 +1,59 @@
 import React, { useState, useEffect } from "react";
-import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, CircularProgress, Alert } from "@mui/material";
-import { getLogs } from "../services/Api"; // Assuming the service file is named api.js or similar
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  CircularProgress,
+  Alert,
+  Typography,
+  Box,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+} from "@mui/material";
+import { getLogs, getDevices } from "../services/Api";
 
 export default function LogTable() {
-  const [logs, setLogs] = useState([]);
+  const [allLogs, setAllLogs] = useState([]);
+  const [filteredLogs, setFilteredLogs] = useState([]);
+  const [devices, setDevices] = useState([]);
+  const [selectedDevice, setSelectedDevice] = useState("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const fetchLogs = async (isInitialLoad = false) => {
+  const fetchData = async (isInitialLoad = false) => {
     if (isInitialLoad) {
       setLoading(true);
     }
     try {
-      const response = await getLogs();
-      // Sort logs by timestamp in descending order
-      const sortedLogs = response.data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-      setLogs(sortedLogs);
+      // Fetch both logs and devices
+      const [logsResponse, devicesResponse] = await Promise.all([
+        getLogs(),
+        getDevices(),
+      ]);
+
+      const sortedLogs = logsResponse.data.sort(
+        (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+      );
+      
+      setAllLogs(sortedLogs);
+      setDevices(devicesResponse.data);
+      
+      // Apply filter based on the current selection
+      if (selectedDevice === "all") {
+        setFilteredLogs(sortedLogs);
+      } else {
+        setFilteredLogs(sortedLogs.filter(log => log.device_id === selectedDevice));
+      }
+
       setError(null);
     } catch (err) {
-      setError("Không thể tải danh sách logs.");
+      setError("Unable to load data.");
       console.error(err);
     } finally {
       if (isInitialLoad) {
@@ -28,14 +63,28 @@ export default function LogTable() {
   };
 
   useEffect(() => {
-    fetchLogs(true); // Initial fetch
+    fetchData(true); // Initial fetch
 
     const intervalId = setInterval(() => {
-      fetchLogs(false); // Polling fetch
+      fetchData(false);
     }, 5000);
 
-    return () => clearInterval(intervalId); // Cleanup
-  }, []);
+    return () => clearInterval(intervalId);
+  }, []); // Run only once on mount to set up interval
+
+  // Effect to re-filter logs when selection changes
+  useEffect(() => {
+    if (selectedDevice === "all") {
+      setFilteredLogs(allLogs);
+    } else {
+      setFilteredLogs(allLogs.filter(log => log.device_id === selectedDevice));
+    }
+  }, [selectedDevice, allLogs]);
+
+
+  const handleDeviceChange = (event) => {
+    setSelectedDevice(event.target.value);
+  };
 
   if (loading) {
     return <CircularProgress />;
@@ -46,25 +95,60 @@ export default function LogTable() {
   }
 
   return (
-    <TableContainer component={Paper}>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>Thời gian</TableCell>
-            <TableCell>Device ID</TableCell>
-            <TableCell>Nội dung</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {logs.map((log) => (
-            <TableRow key={log.id}>
-              <TableCell>{new Date(log.timestamp).toLocaleString()}</TableCell>
-              <TableCell>{log.device_id}</TableCell>
-              <TableCell>{log.message}</TableCell>
+    <Paper sx={{ p: 2, display: "flex", flexDirection: "column" }}>
+      <Typography component="h2" variant="h6" color="primary" gutterBottom>
+        Device Logs
+      </Typography>
+
+      <Box sx={{ marginBottom: 2, maxWidth: 300 }}>
+        <FormControl fullWidth>
+          <InputLabel id="device-filter-label">Filter by device</InputLabel>
+          <Select
+            labelId="device-filter-label"
+            value={selectedDevice}
+            label="Filter by device"
+            onChange={handleDeviceChange}
+          >
+            <MenuItem value="all">All devices</MenuItem>
+            {devices.map((device) => (
+              <MenuItem key={device.id} value={device.id}>
+                {device.name} (ID: {device.id})
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
+
+      <TableContainer>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Time</TableCell>
+              <TableCell>Device ID</TableCell>
+              <TableCell>Content</TableCell>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
+          </TableHead>
+          <TableBody>
+            {filteredLogs.length > 0 ? (
+              filteredLogs.map((log) => (
+                <TableRow key={log.id}>
+                  <TableCell>
+                    {new Date(log.timestamp).toLocaleString()}
+                  </TableCell>
+                  <TableCell>{log.device_id}</TableCell>
+                  <TableCell>{log.message}</TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={3} align="center">
+                  No logs to display.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Paper>
   );
 }

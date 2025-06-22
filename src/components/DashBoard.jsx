@@ -22,7 +22,7 @@ export default function Dashboard() {
       setStats({ totalDevices, onlineDevices, offlineDevices });
       setError(null);
     } catch (err) {
-      setError("Không thể tải dữ liệu thống kê.");
+      setError("Unable to load statistics.");
       console.error(err);
     } finally {
       if (isInitialLoad) {
