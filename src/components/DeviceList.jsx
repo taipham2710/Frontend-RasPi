@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, CircularProgress, Alert } from "@mui/material";
-import { getDevices } from "../services/api"; // Corrected import path casing to lowercase
+import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, CircularProgress, Alert, Button } from "@mui/material";
+import { Link } from "react-router-dom";
+import { getDevices } from "../services/Api";
 
 export default function DeviceList() {
   const [devices, setDevices] = useState([]);
@@ -12,10 +13,10 @@ export default function DeviceList() {
       try {
         setLoading(true);
         const response = await getDevices();
-        setDevices(response.data); // axios trả về dữ liệu trong response.data
+        setDevices(response.data); // axios returns data in response.data
         setError(null);
       } catch (err) {
-        setError("Không thể tải danh sách thiết bị. Vui lòng kiểm tra kết nối và backend.");
+        setError("Unable to load device list. Please check your connection and backend.");
         console.error(err);
       } finally {
         setLoading(false);
@@ -38,10 +39,10 @@ export default function DeviceList() {
       <Table>
         <TableHead>
           <TableRow>
-            <TableCell>Tên thiết bị</TableCell>
-            <TableCell>Trạng thái</TableCell>
-            <TableCell>Loại</TableCell>
-            <TableCell>Thao tác</TableCell>
+            <TableCell>Device Name</TableCell>
+            <TableCell>Status</TableCell>
+            <TableCell>Device ID</TableCell>
+            <TableCell>Actions</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -54,9 +55,11 @@ export default function DeviceList() {
                   color={new Date(device.last_seen) > new Date(Date.now() - 5 * 60 * 1000) ? "success" : "error"}
                 />
               </TableCell>
-              <TableCell>{device.type}</TableCell>
+              <TableCell>{device.id}</TableCell>
               <TableCell>
-                {/* Thêm nút chi tiết, điều khiển nếu cần */}
+                <Button component={Link} to={`/devices/${device.id}`} variant="outlined" size="small">
+                  Xem
+                </Button>
               </TableCell>
             </TableRow>
           ))}
