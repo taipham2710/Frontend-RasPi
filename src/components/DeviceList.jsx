@@ -1,7 +1,38 @@
-import React from "react";
-import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip } from "@mui/material";
+import React, { useState, useEffect } from "react";
+import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, CircularProgress, Alert } from "@mui/material";
+import { getDevices } from "../services/api"; // Corrected import path casing to lowercase
 
-export default function DeviceList({ devices }) {
+export default function DeviceList() {
+  const [devices, setDevices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchDevices = async () => {
+      try {
+        setLoading(true);
+        const response = await getDevices();
+        setDevices(response.data); // axios trả về dữ liệu trong response.data
+        setError(null);
+      } catch (err) {
+        setError("Không thể tải danh sách thiết bị. Vui lòng kiểm tra kết nối và backend.");
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDevices();
+  }, []);
+
+  if (loading) {
+    return <CircularProgress />;
+  }
+
+  if (error) {
+    return <Alert severity="error">{error}</Alert>;
+  }
+
   return (
     <TableContainer component={Paper}>
       <Table>
@@ -14,13 +45,13 @@ export default function DeviceList({ devices }) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {devices.map((device) => (
+          {devices && devices.map((device) => (
             <TableRow key={device.id}>
               <TableCell>{device.name}</TableCell>
               <TableCell>
                 <Chip
-                  label={device.status === "online" ? "Online" : "Offline"}
-                  color={device.status === "online" ? "success" : "error"}
+                  label={new Date(device.last_seen) > new Date(Date.now() - 5 * 60 * 1000) ? "Online" : "Offline"}
+                  color={new Date(device.last_seen) > new Date(Date.now() - 5 * 60 * 1000) ? "success" : "error"}
                 />
               </TableCell>
               <TableCell>{device.type}</TableCell>
