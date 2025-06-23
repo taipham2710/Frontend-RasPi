@@ -15,8 +15,15 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
 } from "@mui/material";
-import { getLogs, getDevices } from "../services/Api";
+import DeleteIcon from '@mui/icons-material/Delete';
+import { getLogs, getDevices, deleteLog } from "../services/Api";
 
 export default function LogTable() {
   const [allLogs, setAllLogs] = useState([]);
@@ -25,6 +32,9 @@ export default function LogTable() {
   const [selectedDevice, setSelectedDevice] = useState("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [logToDelete, setLogToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchData = async (isInitialLoad = false) => {
     if (isInitialLoad) {
@@ -81,9 +91,36 @@ export default function LogTable() {
     }
   }, [selectedDevice, allLogs]);
 
-
   const handleDeviceChange = (event) => {
     setSelectedDevice(event.target.value);
+  };
+
+  const handleDeleteClick = (log) => {
+    setLogToDelete(log);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!logToDelete) return;
+    
+    try {
+      setDeleting(true);
+      await deleteLog(logToDelete.id);
+      setDeleteDialogOpen(false);
+      setLogToDelete(null);
+      // Refresh data
+      await fetchData(false);
+    } catch (err) {
+      console.error('Error deleting log:', err);
+      setError('Failed to delete log.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setLogToDelete(null);
   };
 
   if (loading) {
@@ -126,6 +163,7 @@ export default function LogTable() {
               <TableCell>Time</TableCell>
               <TableCell>Device ID</TableCell>
               <TableCell>Content</TableCell>
+              <TableCell align="center">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -137,11 +175,21 @@ export default function LogTable() {
                   </TableCell>
                   <TableCell>{log.device_id}</TableCell>
                   <TableCell>{log.message}</TableCell>
+                  <TableCell align="center">
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={() => handleDeleteClick(log)}
+                      title="Delete log"
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </TableCell>
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={3} align="center">
+                <TableCell colSpan={4} align="center">
                   No logs to display.
                 </TableCell>
               </TableRow>
@@ -149,6 +197,42 @@ export default function LogTable() {
           </TableBody>
         </Table>
       </TableContainer>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onClose={handleDeleteCancel}>
+        <DialogTitle>Delete Log</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete this log?
+          </Typography>
+          {logToDelete && (
+            <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+              <Typography variant="body2">
+                <strong>Time:</strong> {new Date(logToDelete.timestamp).toLocaleString()}
+              </Typography>
+              <Typography variant="body2">
+                <strong>Device ID:</strong> {logToDelete.device_id}
+              </Typography>
+              <Typography variant="body2">
+                <strong>Message:</strong> {logToDelete.message}
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleDeleteConfirm} 
+            color="error" 
+            variant="contained"
+            disabled={deleting}
+          >
+            {deleting ? <CircularProgress size={20} /> : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
   );
 }
