@@ -8,3 +8,4 @@ export const getDeviceById = (id) => axios.get(`${API_URL}/api/device/${id}`);
 export const getLogsByDevice = (deviceId) => axios.get(`${API_URL}/api/device/${deviceId}/logs`);
 
 export const deleteDevice = (id) => axios.delete(`${API_URL}/api/device/${id}`);
+export const updateDevice = (id, data) => axios.put(`${API_URL}/api/device/${id}`, data);
