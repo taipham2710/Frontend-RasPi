@@ -7,12 +7,14 @@ import {
   useMediaQuery,
   Card,
   CardContent,
-  Stack
+  Stack,
+  Tooltip
 } from "@mui/material";
 import { Link } from "react-router-dom";
 import SearchIcon from '@mui/icons-material/Search';
-import { getDevices, deleteDevice } from "../services/Api";
+import { getDevices, deleteDevice, triggerUpdateDevice, getLatestLogByType } from "../services/Api";
 import ExportData from "./ExportData";
+import Snackbar from '@mui/material/Snackbar';
 
 export default function DeviceList() {
   const [devices, setDevices] = useState([]);
@@ -23,9 +25,22 @@ export default function DeviceList() {
   const [deviceToDelete, setDeviceToDelete] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [updatingDeviceId, setUpdatingDeviceId] = useState(null);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [deviceStatuses, setDeviceStatuses] = useState({});
+  const [prevStatuses, setPrevStatuses] = useState({});
+  const [prevOnline, setPrevOnline] = useState({});
   
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
+  const ONLINE_THRESHOLD_MS = 5 * 60 * 1000; // 5 phút
+  const isDeviceOnline = (device) => {
+    if (!device.last_seen) return false;
+    const lastSeenMs = Date.parse(device.last_seen);
+    const nowMs = Date.now();
+    return nowMs - lastSeenMs < ONLINE_THRESHOLD_MS;
+  };
 
   const fetchDevices = async (isInitialLoad = false) => {
     if (isInitialLoad) {
@@ -72,13 +87,65 @@ export default function DeviceList() {
     if (statusFilter !== "all") {
       const isOnline = statusFilter === "online";
       filtered = filtered.filter(device => {
-        const deviceIsOnline = new Date(device.last_seen) > new Date(Date.now() - 5 * 60 * 1000);
+        const deviceIsOnline = isDeviceOnline(device);
         return deviceIsOnline === isOnline;
       });
     }
 
     setFilteredDevices(filtered);
   }, [devices, searchTerm, statusFilter]);
+
+  // After fetchDevices, fetch updated state for each device
+  useEffect(() => {
+    const fetchStatuses = async () => {
+      const statuses = {};
+      for (const device of devices) {
+        try {
+          const deployLog = await getLatestLogByType(device.id, 'deploy').then(res => res.data).catch(() => null);
+          const rollbackLog = await getLatestLogByType(device.id, 'rollback').then(res => res.data).catch(() => null);
+          let status = null;
+          if (deployLog) {
+            if (deployLog.log_level === 'error') status = 'Deploy failed';
+            else if (deployLog.log_level === 'info') status = 'Deploy success';
+            else status = 'Deploying';
+          }
+          if (rollbackLog && (!deployLog || new Date(rollbackLog.timestamp) > new Date(deployLog.timestamp))) {
+            if (rollbackLog.log_level === 'error') status = 'Rollback failed';
+            else if (rollbackLog.log_level === 'warning' || rollbackLog.log_level === 'info') status = 'Rollback success';
+            else status = 'Rolling back';
+          }
+          statuses[device.id] = status;
+        } catch (e) {
+          statuses[device.id] = null;
+        }
+      }
+      setDeviceStatuses(statuses);
+    };
+    if (devices.length > 0) fetchStatuses();
+  }, [devices]);
+
+  // Tracks update/rollback and online/offline status changes to display notifications
+  useEffect(() => {
+    if (devices.length === 0) return;
+    devices.forEach(device => {
+      const prevStatus = prevStatuses[device.id];
+      const newStatus = deviceStatuses[device.id];
+      if (prevStatus && newStatus && prevStatus !== newStatus) {
+        setSnackbar({ open: true, message: `Device ${device.name}: ${newStatus}`, severity: newStatus.includes('failed') ? 'error' : newStatus.includes('success') ? 'success' : 'info' });
+      }
+      // Check online/offline
+      const wasOnline = prevOnline[device.id];
+      const isOnline = isDeviceOnline(device);
+      if (wasOnline !== undefined && wasOnline !== isOnline) {
+        setSnackbar({ open: true, message: `Device ${device.name} is now ${isOnline ? 'online' : 'offline'}`, severity: isOnline ? 'success' : 'warning' });
+      }
+    });
+    // Save current state for later comparison
+    setPrevStatuses({ ...deviceStatuses });
+    const onlineMap = {};
+    devices.forEach(device => { onlineMap[device.id] = isDeviceOnline(device); });
+    setPrevOnline(onlineMap);
+  }, [deviceStatuses, devices]);
 
   const handleClickOpenDeleteDialog = (device) => {
     setDeviceToDelete(device);
@@ -112,6 +179,18 @@ export default function DeviceList() {
     setStatusFilter(event.target.value);
   };
 
+  const handleUpdateDevice = async (deviceId) => {
+    setUpdatingDeviceId(deviceId);
+    try {
+      await triggerUpdateDevice(deviceId);
+      setSnackbar({ open: true, message: 'Update command sent successfully!', severity: 'success' });
+    } catch (err) {
+      setSnackbar({ open: true, message: 'Failed to send update command.', severity: 'error' });
+    } finally {
+      setUpdatingDeviceId(null);
+    }
+  };
+
   if (loading) {
     return <CircularProgress />;
   }
@@ -131,8 +210,8 @@ export default function DeviceList() {
                 {device.name}
               </Typography>
               <Chip
-                label={new Date(device.last_seen) > new Date(Date.now() - 5 * 60 * 1000) ? "Online" : "Offline"}
-                color={new Date(device.last_seen) > new Date(Date.now() - 5 * 60 * 1000) ? "success" : "error"}
+                label={isDeviceOnline(device) ? "Online" : "Offline"}
+                color={isDeviceOnline(device) ? "success" : "error"}
                 size="small"
               />
             </Box>
@@ -147,18 +226,27 @@ export default function DeviceList() {
               </Typography>
             )}
             
+            {device.version && (
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                <strong>Version:</strong> {device.version}
+              </Typography>
+            )}
+            
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               <strong>Last Seen:</strong> {new Date(device.last_seen).toLocaleString()}
             </Typography>
             
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <Button component={Link} to={`/devices/${device.id}`} variant="outlined" size="small" fullWidth>
+            <Stack direction="row" spacing={1} sx={{ width: '100%' }}>
+              <Button component={Link} to={`/devices/${device.id}`} variant="outlined" size="small" sx={{ flex: 1, minWidth: 0 }}>
                 View
               </Button>
-              <Button variant="outlined" color="error" size="small" fullWidth onClick={() => handleClickOpenDeleteDialog(device)}>
+              <Button variant="contained" color="primary" size="small" sx={{ flex: 1, minWidth: 0 }} disabled={updatingDeviceId === device.id} onClick={() => handleUpdateDevice(device.id)}>
+                {updatingDeviceId === device.id ? <CircularProgress size={18} /> : 'Update'}
+              </Button>
+              <Button variant="outlined" color="error" size="small" sx={{ flex: 1, minWidth: 0 }} onClick={() => handleClickOpenDeleteDialog(device)}>
                 Delete
               </Button>
-            </Box>
+            </Stack>
           </CardContent>
         </Card>
       ))}
@@ -167,46 +255,74 @@ export default function DeviceList() {
 
   // Desktop table view
   const renderDesktopView = () => (
-    <TableContainer component={Paper}>
-      <Table>
+    <TableContainer component={Paper} sx={{ borderRadius: 3, boxShadow: 3 }}>
+      <Table size="small" sx={{ minWidth: 800 }}>
         <TableHead>
-          <TableRow>
-            <TableCell>Device Name</TableCell>
-            <TableCell>Location</TableCell>
-            <TableCell>Status</TableCell>
-            <TableCell>Device ID</TableCell>
-            <TableCell>Last Seen</TableCell>
-            <TableCell>Actions</TableCell>
+          <TableRow sx={{ backgroundColor: 'primary.light' }}>
+            <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: 16 }}>Device Name</TableCell>
+            <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: 16 }}>Location</TableCell>
+            <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: 16 }}>Status</TableCell>
+            <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: 16 }}>Version</TableCell>
+            <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: 16 }}>Device ID</TableCell>
+            <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: 16 }}>Last Seen</TableCell>
+            <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: 16 }}>Update Status</TableCell>
+            <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: 16 }}>Actions</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {filteredDevices.length > 0 ? (
             filteredDevices.map((device) => (
-              <TableRow key={device.id}>
-                <TableCell>{device.name}</TableCell>
-                <TableCell>{device.location || "Not specified"}</TableCell>
-                <TableCell>
+              <TableRow key={device.id} hover sx={{ '&:hover': { backgroundColor: 'grey.100' }, height: 56 }}>
+                <TableCell align="center">{device.name}</TableCell>
+                <TableCell align="center">
+                  <Tooltip title={device.location || 'Not specified'} arrow>
+                    <span style={{ display: 'inline-block', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>
+                      {device.location || 'Not specified'}
+                    </span>
+                  </Tooltip>
+                </TableCell>
+                <TableCell align="center">
                   <Chip
-                    label={new Date(device.last_seen) > new Date(Date.now() - 5 * 60 * 1000) ? "Online" : "Offline"}
-                    color={new Date(device.last_seen) > new Date(Date.now() - 5 * 60 * 1000) ? "success" : "error"}
+                    label={isDeviceOnline(device) ? "Online" : "Offline"}
+                    color={isDeviceOnline(device) ? "success" : "error"}
                     size="small"
+                    sx={{ fontWeight: 'bold', borderRadius: 1 }}
                   />
                 </TableCell>
-                <TableCell>{device.id}</TableCell>
-                <TableCell>{new Date(device.last_seen).toLocaleString()}</TableCell>
-                <TableCell>
-                  <Button component={Link} to={`/devices/${device.id}`} variant="outlined" size="small" sx={{ mr: 1 }}>
-                    View
-                  </Button>
-                  <Button variant="outlined" color="error" size="small" onClick={() => handleClickOpenDeleteDialog(device)}>
-                    Delete
-                  </Button>
+                <TableCell align="center">
+                  <Tooltip title={device.version || '-'} arrow>
+                    <span style={{ display: 'inline-block', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>
+                      {device.version || '-'}
+                    </span>
+                  </Tooltip>
+                </TableCell>
+                <TableCell align="center">{device.id}</TableCell>
+                <TableCell align="center">{new Date(device.last_seen).toLocaleString()}</TableCell>
+                <TableCell align="center">
+                  {deviceStatuses[device.id] ? (
+                    <Chip label={deviceStatuses[device.id]} color={deviceStatuses[device.id].includes('failed') ? 'error' : deviceStatuses[device.id].includes('success') ? 'success' : 'warning'} size="small" sx={{ fontWeight: 'bold', borderRadius: 1 }} />
+                  ) : (
+                    <Chip label="Normal" size="small" sx={{ fontWeight: 'bold', borderRadius: 1 }} />
+                  )}
+                </TableCell>
+                <TableCell align="center">
+                  <Stack direction="row" spacing={1} justifyContent="center">
+                    <Button component={Link} to={`/devices/${device.id}`} variant="outlined" size="small" sx={{ flex: 1, minWidth: 0, borderRadius: 2, fontWeight: 'bold' }}>
+                      View
+                    </Button>
+                    <Button variant="contained" color="primary" size="small" sx={{ flex: 1, minWidth: 0, borderRadius: 2, fontWeight: 'bold' }} disabled={updatingDeviceId === device.id} onClick={() => handleUpdateDevice(device.id)}>
+                      {updatingDeviceId === device.id ? <CircularProgress size={18} /> : 'Update'}
+                    </Button>
+                    <Button variant="outlined" color="error" size="small" sx={{ flex: 1, minWidth: 0, borderRadius: 2, fontWeight: 'bold' }} onClick={() => handleClickOpenDeleteDialog(device)}>
+                      Delete
+                    </Button>
+                  </Stack>
                 </TableCell>
               </TableRow>
             ))
           ) : (
             <TableRow>
-              <TableCell colSpan={6} align="center">
+              <TableCell colSpan={8} align="center">
                 {searchTerm || statusFilter !== "all" ? "No devices match your search criteria." : "No devices found."}
               </TableCell>
             </TableRow>
@@ -280,6 +396,14 @@ export default function DeviceList() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={3000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        message={snackbar.message}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
     </>
   );
 }
