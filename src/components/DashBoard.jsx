@@ -130,16 +130,17 @@ export default function DashBoard() {
       {/* Charts */}
       <Grid container spacing={4} direction="column" alignItems="center">
         {/* Device Status Pie Chart */}
-        <Grid item xs={12} sx={{ width: '100%', maxWidth: 900 }}>
+        <Grid item xs={12} sx={{ width: '100%', maxWidth: 900, mb: 4 }}>
           <Paper sx={{ p: 2, height: 400 }}>
-            <Typography variant="h6" gutterBottom>Device Status Distribution</Typography>
+            <Typography variant="h6" gutterBottom sx={{ mt: 4 }}>Device Status Distribution</Typography>
             <ResponsiveContainer>
               {deviceStatusData.length > 0 ? (
                 <PieChart>
                   <Pie data={deviceStatusData} cx="50%" cy="50%" labelLine={false} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} outerRadius={120} dataKey="value">
                     {deviceStatusData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
                   </Pie>
-                  <Tooltip content={<CustomTooltip />} /><Legend />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{ marginTop: 32 }} />
                 </PieChart>
               ) : <Box display="flex" alignItems="center" justifyContent="center" height="100%"><Typography>No device status data</Typography></Box>}
             </ResponsiveContainer>
@@ -147,18 +148,18 @@ export default function DashBoard() {
         </Grid>
 
         {/* Logs by Device Vertical Bar Chart */}
-        <Grid item xs={12} sx={{ width: '100%', maxWidth: 900 }}>
+        <Grid item xs={12} sx={{ width: '100%', maxWidth: 900, mt: 4 }}>
           <Paper sx={{ p: 2, height: 400 }}>
             <Typography variant="h6" gutterBottom>Top 10 Devices by Log Count</Typography>
             <ResponsiveContainer>
-              <BarChart data={logsByDeviceData} margin={{ top: 20, right: 30, left: 20, bottom: 80 }}>
+              <BarChart data={logsByDeviceData} margin={{ top: 70, right: 30, left: 20, bottom: 80 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" interval={0} angle={-45} textAnchor="end" height={100} />
                 <YAxis allowDecimals={false} />
                 <Tooltip content={<CustomTooltip />} wrapperStyle={{ zIndex: 1000 }} />
-                <Legend verticalAlign="top" />
+                <Legend verticalAlign="top" wrapperStyle={{ top: 10 }} />
                 <Bar dataKey="Logs" fill="#8884d8" name="Number of Logs" barSize={50}>
-                  <LabelList dataKey="Logs" position="top" />
+                  <LabelList dataKey="Logs" position="top" style={{fontWeight: 'bold', fontSize: '16'}} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
